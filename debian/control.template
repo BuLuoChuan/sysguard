@@ -1,0 +1,17 @@
+Package: sysguard
+Version: __VERSION__
+Architecture: all
+Maintainer: SysGuard <root@localhost>
+Depends: python3, python3-tk, smartmontools, sg3-utils, hdparm, udisks2, util-linux, coreutils, procps, iproute2, systemd
+Recommends: ufw, e2fsprogs, policykit-1
+Section: utils
+Priority: optional
+Homepage: https://github.com/BuLuoChuan/sysguard
+Description: Linux 系统管理与优化工具（GUI）
+ SysGuard（系统管家）提供系统监控、进程与服务管理、磁盘检修
+ （SMART/坏道）、USB 挂载与机械硬盘停转、网络优化、垃圾清理、
+ 内存压缩与交换管理、系统优化与安全审计。
+ .
+ GUI 以普通用户运行，所有需要 root 的操作统一经 pkexec 调用
+ 特权入口 sysguard-cli，入口内部做命令白名单与磁盘守卫校验，
+ 绝不触碰 SSD 与系统盘。

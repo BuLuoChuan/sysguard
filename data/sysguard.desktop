@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=SysGuard
+Name[zh_CN]=系统管家
+GenericName=System Management and Optimization
+GenericName[zh_CN]=系统管理与优化
+Comment=Linux system management and optimization tool
+Comment[zh_CN]=Linux 系统管理与优化工具
+Exec=/usr/bin/sysguard
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Settings;Utility;
+Keywords=system;monitor;optimize;clean;disk;security;
+StartupNotify=true

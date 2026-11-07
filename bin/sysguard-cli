@@ -1,0 +1,4 @@
+#!/bin/sh
+# SysGuard 特权入口（由 pkexec 以 root 身份调用，GUI 不直接执行）
+export PYTHONPATH="/usr/lib/sysguard${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m sysguard.core.privileged "$@"

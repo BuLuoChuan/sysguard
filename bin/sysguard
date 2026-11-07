@@ -1,0 +1,4 @@
+#!/bin/sh
+# SysGuard 图形界面启动器（普通用户运行）
+export PYTHONPATH="/usr/lib/sysguard${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m sysguard "$@"

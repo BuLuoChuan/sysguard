@@ -1,0 +1,38 @@
+# Maintainer: SysGuard <root@localhost>
+# 构建：在 arch/ 目录下执行 `makepkg -si`（或 `makepkg -f` 只打包）。
+# 纯 Python 脚本，架构无关（arch=('any')）。
+pkgname=sysguard
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Linux 系统管理与优化工具（GUI，纯 Python，零第三方依赖）"
+arch=('any')
+url="https://github.com/BuLuoChuan/sysguard"
+license=('GPL3')
+depends=('python' 'tk' 'smartmontools' 'sg3_utils' 'hdparm' 'udisks2'
+         'util-linux' 'coreutils' 'procps-ng' 'iproute2' 'systemd' 'polkit')
+optdepends=('ufw: 防火墙管理' 'e2fsprogs: 文件系统检查修复')
+
+# 本地构建：source 留空，package() 直接引用上级项目根（$startdir/..）拷贝。
+# 上传 GitHub 后建议改为发布的 tar.gz：
+#   source=("sysguard-$pkgver.tar.gz")
+#   sha256sums=('SKIP')
+source=()
+
+package() {
+    local src="$startdir/.."
+    install -d -m 0755 "$pkgdir/usr/lib/sysguard"
+    rm -rf "$pkgdir/usr/lib/sysguard/sysguard"
+    cp -a "$src/lib/sysguard" "$pkgdir/usr/lib/sysguard/"
+
+    find "$pkgdir/usr/lib/sysguard" -name __pycache__ -type d -prune -exec rm -rf {} +
+    find "$pkgdir/usr/lib/sysguard" -type d -exec chmod 0755 {} +
+    find "$pkgdir/usr/lib/sysguard" -type f -exec chmod 0644 {} +
+
+    install -d -m 0755 "$pkgdir/usr/bin" "$pkgdir/usr/sbin"
+    install -m 0755 "$src/bin/sysguard" "$pkgdir/usr/bin/sysguard"
+    install -m 0755 "$src/bin/sysguard-cli" "$pkgdir/usr/sbin/sysguard-cli"
+
+    install -d -m 0755 "$pkgdir/usr/share/applications" "$pkgdir/usr/share/polkit-1/actions"
+    install -m 0644 "$src/data/sysguard.desktop" "$pkgdir/usr/share/applications/sysguard.desktop"
+    install -m 0644 "$src/data/com.sysguard.policy" "$pkgdir/usr/share/polkit-1/actions/com.sysguard.policy"
+}

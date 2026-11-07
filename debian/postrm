@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+case "$1" in
+    purge)
+        # 清理本包运行时可能写入的持久化配置（保留用户常见数据，仅删本包专用文件）
+        rm -f /etc/sysctl.d/99-sysguard-bbr.conf \
+              /etc/sysctl.d/99-sysguard-swap.conf 2>/dev/null || true
+        ;;
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+esac
+exit 0
