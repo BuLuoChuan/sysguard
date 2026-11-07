@@ -1,0 +1,41 @@
+name: 功能建议
+description: 建议 SysGuard 新增或改进一项功能
+title: "[功能建议] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢帮助改进 SysGuard。请先检查是否已有相同的开放功能建议，并描述具体使用场景。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决的问题
+      description: 目前遇到什么问题，或现有功能有什么不足？
+      placeholder: 清楚描述你希望解决的实际问题。
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 希望的功能或行为
+      description: 你期望 SysGuard 如何改进？
+      placeholder: 描述理想的操作方式或结果。
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: 使用场景
+      description: 谁会在什么情况下使用这个功能？如有，可提供示例。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 系统环境（可选）
+      description: 如果建议与环境有关，请填写 Linux 发行版、版本和桌面环境。
+      placeholder: 例如 Ubuntu 24.04 / GNOME
+    validations:
+      required: false

@@ -66,6 +66,15 @@ SysGuard 提供四种安装方式，全部**架构无关**（x86_64 / ARM64 通�
 下载 deb、rpm 安装包、源码安装脚本和源码归档。下载后按下表选择对应安装
 方式；本测试版尚未经过完整测试，请先阅读本说明并在测试环境中使用。
 
+## 功能建议与反馈
+
+欢迎提交你认为 SysGuard 还需要的功能。请先浏览[现有功能建议](https://github.com/BuLuoChuan/sysguard/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)，
+避免重复提交；如已有相同建议，可以在原 issue 下补充场景或 👍 投票。
+
+[提交功能建议](https://github.com/BuLuoChuan/sysguard/issues/new?template=feature_request.yml)
+时，请说明要解决的问题、预期行为和使用场景。如果建议与特定 Linux 发行版
+或桌面环境有关，也请注明名称和版本。
+
 ## 构建 deb
 
 ```bash
