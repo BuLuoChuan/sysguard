@@ -2,7 +2,7 @@
 # 构建：在 arch/ 目录下执行 `makepkg -si`（或 `makepkg -f` 只打包）。
 # 纯 Python 脚本，架构无关（arch=('any')）。
 pkgname=sysguard
-pkgver=1.0.0
+pkgver=1.2.1
 pkgrel=1
 pkgdesc="Linux 系统管理与优化工具（GUI，纯 Python，零第三方依赖）"
 arch=('any')

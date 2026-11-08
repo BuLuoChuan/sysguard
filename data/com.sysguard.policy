@@ -4,7 +4,6 @@
  "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 <policyconfig>
   <vendor>SysGuard</vendor>
-  <vendor_url>https://example.invalid/sysguard</vendor_url>
   <action id="com.sysguard.privileged">
     <description>运行系统管理特权命令</description>
     <description xml:lang="zh_CN">运行系统管理特权命令</description>

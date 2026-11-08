@@ -18,6 +18,37 @@ class Page:
 
         widgets.heading(self.frame.inner, "内存压缩与交换")
 
+        # 功能说明
+        explain = widgets.Card(self.frame.inner)
+        ehead = tk.Frame(explain, bg=widgets.THEME["card_bg"])
+        ehead.pack(fill="x", padx=12, pady=(10, 0))
+        ttk.Label(ehead, text="功能说明", style="Sub.TLabel").pack(side="left")
+        self.explain_lang = "zh"
+        self.explain_btn = ttk.Button(ehead, text="中文 / English",
+                                      command=self._toggle_explain)
+        self.explain_btn.pack(side="right")
+        self.explain_zh = (
+            "· vm.swappiness：控制把内存页换出到交换空间(swap)的倾向；0=尽量少用 swap、"
+            "100=积极换出。桌面场景建议 10~30，避免频繁写盘卡顿。\n"
+            "· zram：用内存模拟的「压缩块设备」——数据先压缩再放回内存，"
+            "以少量 CPU 换更多可用内存，适合内存较小的机器。\n"
+            "· zswap：在页面真正写入磁盘 swap 之前，先做一层压缩缓存；"
+            "命中时直接读取压缩数据，减少磁盘交换读写，提升换出/换入速度。"
+        )
+        self.explain_en = (
+            "· vm.swappiness: how aggressively the kernel swaps memory pages to disk; "
+            "0 = avoid swap, 100 = swap eagerly. 10~30 is recommended for desktops.\n"
+            "· zram: a RAM-backed compressed block device — data is compressed in memory, "
+            "trading a little CPU for more usable RAM (good for low-memory machines).\n"
+            "· zswap: a compressed cache in front of disk swap — hot swapped pages are "
+            "read back from the cache, reducing disk I/O and speeding up swap."
+        )
+        self.explain_text = tk.StringVar(value=self.explain_zh)
+        self.explain_label = ttk.Label(
+            explain, textvariable=self.explain_text, style="CardMuted.TLabel",
+            justify="left", wraplength=720)
+        self.explain_label.pack(anchor="w", padx=12, pady=(4, 10))
+
         # 内存/交换概览
         grid = widgets.two_col(self.frame.inner)
         mem_card = widgets.Card(grid, pack=False)
@@ -70,6 +101,12 @@ class Page:
                    command=self.refresh).pack(anchor="w", padx=18, pady=8)
 
         self.refresh()
+
+    def _toggle_explain(self):
+        self.explain_lang = "en" if self.explain_lang == "zh" else "zh"
+        self.explain_btn.config(text="English" if self.explain_lang == "zh" else "中文")
+        self.explain_text.set(
+            self.explain_zh if self.explain_lang == "zh" else self.explain_en)
 
     def refresh(self):
         s = memory.summary()

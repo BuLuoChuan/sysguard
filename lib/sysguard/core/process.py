@@ -5,12 +5,10 @@ from __future__ import annotations
 from . import shell
 
 
-def list_processes(sort="mem") -> list[dict]:
-    """列出进程。sort：cpu / mem。"""
-    if sort == "cpu":
-        order = "-pcpu"
-    else:
-        order = "-pmem"
+def list_processes(sort="mem", reverse=True) -> list[dict]:
+    """列出进程。sort：cpu / mem；reverse=True 时从高到低排序。"""
+    col = "pcpu" if sort == "cpu" else "pmem"
+    order = ("-" if reverse else "") + col
     rc, out, _ = shell.run(
         ["ps", "-eo", "pid,ppid,user,rss,pcpu,pmem,etimes,comm,args",
          "--sort", order], timeout=30)
@@ -41,12 +39,12 @@ def list_processes(sort="mem") -> list[dict]:
     return rows
 
 
-def search(text: str) -> list[dict]:
+def search(text: str, sort="mem", reverse=True) -> list[dict]:
     text = (text or "").strip().lower()
     if not text:
-        return list_processes()
+        return list_processes(sort=sort, reverse=reverse)
     result = []
-    for p in list_processes():
+    for p in list_processes(sort=sort, reverse=reverse):
         hay = f"{p['pid']} {p['user']} {p['comm']} {p['args']}".lower()
         if text in hay:
             result.append(p)

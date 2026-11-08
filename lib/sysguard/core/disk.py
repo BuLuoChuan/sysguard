@@ -167,6 +167,8 @@ def scan_disks(with_power=False, timeout=25):
             "c0": None,
             "lcc": None,
             "smart_error": None,
+            "health": None,
+            "smart_attrs": [],
         }
 
         if with_power:
@@ -177,6 +179,8 @@ def scan_disks(with_power=False, timeout=25):
                 c0=smart["c0"],
                 lcc=smart["lcc"],
                 smart_error=smart["error"],
+                health=smart["health"],
+                smart_attrs=smart["attrs"],
             )
 
         disks.append(disk)
@@ -202,6 +206,7 @@ def probe_smart(node, timeout=20):
     result = {
         "power_state": "UNKNOWN", "temperature": None, "c0": None,
         "lcc": None, "error": None, "raw": "", "rc": None,
+        "health": None, "attrs": [],
     }
     rc, out, err = shell.run(
         ["smartctl", "-n", "standby", "-i", "-A", node], timeout=timeout)
@@ -241,12 +246,157 @@ def probe_smart(node, timeout=20):
         elif attr_id in (194, 190) and result["temperature"] is None:
             result["temperature"] = raw_val
 
+    result["health"], result["attrs"] = analyze_smart(text)
     return result
 
 
 # ---------------------------------------------------------------------------
-# 需 root 的操作（转交特权入口）
+# SMART 属性解析（中文专有名词 + 黄/红分级）
 # ---------------------------------------------------------------------------
+
+# ATA/SATA SMART 属性 ID -> 中文专有名词
+SMART_ATTR_CN = {
+    1: "原始读错误率", 2: "读吞吐性能", 3: "磁盘起转时间",
+    4: "启动/停止次数", 5: "重分配扇区数", 7: "寻道错误率",
+    8: "寻道时间性能", 9: "通电时间", 10: "起转重试次数",
+    11: "校准重试次数", 12: "通电周期数", 13: "软读错误率",
+    183: "运行时坏块总数", 184: "端到端错误数", 187: "上报不可纠正错误",
+    188: "命令超时", 189: "磁头飞行高度写入", 190: "气流温度",
+    191: "冲击感应错误率", 192: "断电回撤次数", 193: "加载/卸载循环次数",
+    194: "温度", 195: "硬件 ECC 恢复次数", 196: "重分配事件次数",
+    197: "当前待决扇区", 198: "离线不可纠正扇区", 199: "UDMA CRC 错误",
+    200: "多区域错误率", 201: "软读错误率(2)", 202: "数据地址标记错误",
+    240: "磁头飞行时间", 241: "累计写入量", 242: "累计读取量",
+    254: "自由落体传感器",
+}
+
+# raw 值 > 0 即视为「红色异常」的关键属性（坏扇区/不可纠正类）
+SMART_BAD_ATTRS = {5, 183, 187, 197, 198}
+# raw 值 > 0 视为「黄色警告」的属性（可修复/环境类）
+SMART_WARN_ATTRS = {10, 188, 196, 199, 202}
+
+_ATTR_LINE_RE = re.compile(
+    r"^\s*(\d+)\s+([\w\-_]+)\s+(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+"
+    r"([\w\-]+)\s+([\w\-]+)\s+(\S+)\s+(.*)$")
+
+
+def _first_int(s):
+    m = re.search(r"\d+", s or "")
+    try:
+        return int(m.group(0)) if m else None
+    except ValueError:
+        return None
+
+
+def _attr_status(attr_id, value, threshold, when_failed, raw):
+    if when_failed not in ("-", "", "0"):
+        return "bad"
+    if attr_id in SMART_BAD_ATTRS and _first_int(raw) and _first_int(raw) > 0:
+        return "bad"
+    if attr_id in SMART_WARN_ATTRS and _first_int(raw) and _first_int(raw) > 0:
+        return "warn"
+    if threshold and value <= threshold:
+        return "warn"
+    return "ok"
+
+
+def _analyze_ata(report):
+    attrs = []
+    in_table = False
+    for line in report.splitlines():
+        if "ATTRIBUTE_NAME" in line and "WHEN_FAILED" in line:
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        m = _ATTR_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        try:
+            attr_id = int(m.group(1))
+            value = int(m.group(4))
+            worst = int(m.group(5))
+            threshold = int(m.group(6))
+        except ValueError:
+            continue
+        when_failed = m.group(9)
+        raw = m.group(10).strip()
+        attrs.append({
+            "id": attr_id,
+            "name": m.group(2),
+            "name_cn": SMART_ATTR_CN.get(attr_id, m.group(2)),
+            "value": value,
+            "worst": worst,
+            "threshold": threshold,
+            "when_failed": when_failed,
+            "raw": raw,
+            "status": _attr_status(attr_id, value, threshold, when_failed, raw),
+        })
+    return attrs
+
+
+def _analyze_nvme(report):
+    """NVMe 关键健康项 -> 与 ATA 结构对齐的属性列表（中文专有名词）。"""
+    attrs = []
+    for line in report.splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key_s = key.strip()
+        val_s = val.strip()
+        if "Critical Warning" in key_s:
+            attrs.append(_nvme_attr("Critical Warning", "严重警告", val_s, "bad"))
+        elif key_s == "Temperature":
+            num = _first_int(val_s)
+            attrs.append({"id": "temp", "name": "Temperature", "name_cn": "温度",
+                          "value": num, "worst": num, "threshold": 0,
+                          "when_failed": "-", "raw": val_s, "status": "ok"})
+        elif key_s == "Available Spare":
+            pct = _first_int(val_s)
+            st = "bad" if pct is not None and pct < 10 else ("warn" if pct is not None and pct < 50 else "ok")
+            attrs.append({"id": "spare", "name": "Available Spare",
+                          "name_cn": "可用备用空间", "value": pct, "worst": pct,
+                          "threshold": 0, "when_failed": "-", "raw": val_s,
+                          "status": st})
+        elif key_s == "Percentage Used":
+            pct = _first_int(val_s)
+            st = "warn" if pct is not None and pct >= 90 else "ok"
+            attrs.append({"id": "used", "name": "Percentage Used",
+                          "name_cn": "已使用寿命", "value": pct, "worst": pct,
+                          "threshold": 0, "when_failed": "-", "raw": val_s,
+                          "status": st})
+        elif "Media and Data Integrity Errors" in key_s:
+            n = _first_int(val_s) or 0
+            attrs.append({"id": "integrity", "name": "Media Errors",
+                          "name_cn": "介质与数据完整性错误", "value": n, "worst": n,
+                          "threshold": 0, "when_failed": "-", "raw": val_s,
+                          "status": "bad" if n > 0 else "ok"})
+    return attrs
+
+
+def _nvme_attr(name, name_cn, raw, status):
+    return {"id": name.lower().replace(" ", "_"), "name": name, "name_cn": name_cn,
+            "value": _first_int(raw), "worst": _first_int(raw), "threshold": 0,
+            "when_failed": "-", "raw": raw, "status": status}
+
+
+def _overall_health(attrs):
+    if not attrs:
+        return None
+    if any(a["status"] == "bad" for a in attrs):
+        return "bad"
+    if any(a["status"] == "warn" for a in attrs):
+        return "warn"
+    return "ok"
+
+
+def analyze_smart(report):
+    """解析 SMART 输出，返回 (health, attrs)。health 为 ok/warn/bad/None。"""
+    text = report or ""
+    attrs = _analyze_ata(text)
+    if not attrs:
+        attrs = _analyze_nvme(text)
+    return _overall_health(attrs), attrs
 
 def scan_with_power():
     """经特权入口扫描磁盘（含 SMART/温度，需 root）。返回 (ok, disks, error)。"""

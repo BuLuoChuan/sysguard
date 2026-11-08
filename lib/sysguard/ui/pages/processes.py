@@ -26,11 +26,20 @@ class Page:
         ttk.Button(db, text="搜索",
                    command=lambda: self.reload(search_var.get())).pack(
             side="left", padx=4)
-        self.sort_var = tk.StringVar(value="mem")
-        ttk.Radiobutton(db, text="按内存", variable=self.sort_var, value="mem",
-                        command=self._reload_current).pack(side="left", padx=6)
-        ttk.Radiobutton(db, text="按CPU", variable=self.sort_var, value="cpu",
-                        command=self._reload_current).pack(side="left", padx=6)
+        self.sort_map = {
+            "内存 从高到低": ("mem", True),
+            "内存 从低到高": ("mem", False),
+            "CPU 从高到低": ("cpu", True),
+            "CPU 从低到高": ("cpu", False),
+        }
+        self.sort_var = tk.StringVar(value="内存 从高到低")
+        ttk.Label(db, text="排序", style="Muted.TLabel").pack(side="left", padx=(4, 2))
+        self.sort_box = ttk.Combobox(db, textvariable=self.sort_var,
+                                     state="readonly", width=14,
+                                     values=list(self.sort_map))
+        self.sort_box.pack(side="left", padx=2)
+        self.sort_box.bind("<<ComboboxSelected>>",
+                           lambda e: self._reload_current())
         ttk.Button(db, text="结束进程",
                    command=self.kill_selected).pack(side="right")
         ttk.Button(db, text="刷新",
@@ -83,8 +92,9 @@ class Page:
         self.app.set_status("正在加载进程…")
         self.tree.delete(*self.tree.get_children())
         q = query.strip()
-        rows = process.search(q) if q else process.list_processes(
-            sort=self.sort_var.get())
+        sort, reverse = self.sort_map.get(self.sort_var.get(), ("mem", True))
+        rows = process.search(q, sort=sort, reverse=reverse) if q else \
+            process.list_processes(sort=sort, reverse=reverse)
         for r in rows[:300]:
             self.tree.insert("", "end", values=(
                 r["pid"], r["user"], f"{r['cpu']:.1f}",
@@ -117,6 +127,13 @@ class Page:
             messagebox.showinfo("提示", "请先选择一个服务")
             return
         unit = self.svc_tree.item(sel[0], "values")[0]
+        act_cn = {"start": "启动", "stop": "停止", "restart": "重启"}.get(
+            action, action)
+        if not messagebox.askyesno(
+                "确认操作",
+                f"确定要{act_cn}服务「{unit}」？\n\n"
+                "系统服务操作将弹出管理员密码确认框（pkexec）。"):
+            return
         self.app.busy(True)
         try:
             ok, msg = process.service_action(unit, action)

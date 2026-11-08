@@ -1,5 +1,5 @@
 Name:           sysguard
-Version:        1.0.0
+Version:        1.2.1
 Release:        1
 Summary:        Linux 系统管理与优化工具（GUI）
 
@@ -72,5 +72,16 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 %changelog
+* Sat Nov 07 2026 SysGuard <root@localhost> - 1.2.1-1
+- 进程管理：CPU/内存升降序排序，结束/停止/重启前二次确认，系统服务走 pkexec 密码
+- 磁盘检修、磁盘空间、USB 设备各自提供页面，并按类别分组；SMART 中文专有名词与黄/红告警
+- 中文环境一键切换语言环境（localectl 经 pkexec）
+- 镜像源一键测网速/测延时/测稳定
+- 系统优化说明中英文切换、内存压缩与交换增加功能说明
+- 左侧导航按大类自动合并分类
+* Sat Nov 07 2026 SysGuard <root@localhost> - 1.2.0-1
+- 新增软件包修复、启动性能分析、磁盘空间深度分析、自启动项增强与定时任务审计
+- 新增错误日志聚合与一键诊断报告、电源/电池健康与三档能效、网络诊断与 WiFi 节能
+- 新增资源阈值告警、中文环境检测
 * Wed Nov 04 2026 SysGuard <root@localhost> - 1.0.0-1
 - 初始打包

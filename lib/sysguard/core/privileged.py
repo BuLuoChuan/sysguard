@@ -570,7 +570,170 @@ def cmd_mirror_restore(args):
     return _ok({"done": True})
 
 
+_PKG_RE = re.compile(r"^[a-z0-9][a-z0-9+.\-]*(:[a-z0-9][a-z0-9+.\-]*)?$")
+
+
+def cmd_pkg_fix(args):
+    if args:
+        return _err("pkg_fix 不接受参数")
+    errors = []
+    rc, out, err = _run(["dpkg", "--configure", "-a"], timeout=600)
+    if rc != 0:
+        errors.append(f"dpkg --configure -a：{err.strip() or rc}")
+    rc2, out2, err2 = _run(
+        ["apt-get", "--fix-broken", "install", "-y"], timeout=600)
+    if rc2 != 0:
+        errors.append(f"apt --fix-broken：{err2.strip() or rc2}")
+    if errors:
+        return _err("；".join(errors))
+    return _ok({"configured": True, "out": (out + out2).strip()[-500:]})
+
+
+def cmd_apt_mark(args):
+    if len(args) != 2 or args[0] not in ("hold", "unhold"):
+        return _err("用法：apt_mark <hold|unhold> <包名>")
+    action, pkg = args
+    if not _PKG_RE.match(pkg):
+        return _err(f"非法的包名：{pkg!r}")
+    rc, out, err = _run(["apt-mark", action, pkg], timeout=120)
+    if rc != 0:
+        return _err(err.strip() or f"apt-mark 失败：{rc}")
+    return _ok({"action": action, "package": pkg})
+
+
+def cmd_pkg_orphans(args):
+    if args:
+        return _err("pkg_orphans 不接受参数")
+    rc, out, err = _run(["apt-get", "autoremove", "-s"], timeout=300)
+    if rc != 0:
+        return _err(err.strip() or "无法预演 autoremove")
+    pkgs, grab = [], False
+    for line in out.splitlines():
+        if "will be REMOVED" in line:
+            grab = True
+            continue
+        if not grab:
+            continue
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(("0 upgraded", "WARNING", "Need to get")):
+            break
+        tok = line.split()[0]
+        if _PKG_RE.match(tok):
+            pkgs.append(tok)
+    return _ok({"orphans": pkgs})
+
+
+def cmd_service_delay(args):
+    if len(args) != 2:
+        return _err("用法：service_delay <单元> <秒数>")
+    unit = args[0]
+    if not re.match(r"^[a-zA-Z0-9_@][a-zA-Z0-9_.@:\-]*$", unit) or ".." in unit:
+        return _err(f"非法的单元名：{unit!r}")
+    try:
+        seconds = int(args[1])
+    except ValueError:
+        return _err("秒数必须是整数")
+    if seconds < 0 or seconds > 86400:
+        return _err("秒数范围 0-86400")
+
+    base = unit.replace(".service", "")
+    timer_name = f"sysguard-delay-{base}.timer"
+    svc_name = f"sysguard-delay-{base}.service"
+    timer_path = f"/etc/systemd/system/{timer_name}"
+    svc_path = f"/etc/systemd/system/{svc_name}"
+
+    _run(["systemctl", "disable", "--now", timer_name], timeout=60)
+    _run(["systemctl", "stop", timer_name], timeout=60)
+    for p in (timer_path, svc_path):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    _run(["systemctl", "daemon-reload"], timeout=60)
+
+    if seconds > 0:
+        _run(["systemctl", "disable", unit], timeout=60)
+        svc = (f"[Unit]\nDescription=系统管家延时启动 {unit}\n\n"
+               f"[Service]\nType=oneshot\n"
+               f"ExecStart=/bin/systemctl start {unit}\n")
+        tim = (f"[Unit]\nDescription=系统管家延时启动 {unit}\n\n"
+               f"[Timer]\nOnBootSec={seconds}s\n\n"
+               f"[Install]\nWantedBy=timers.target\n")
+        try:
+            with open(svc_path, "w", encoding="utf-8") as f:
+                f.write(svc)
+            with open(timer_path, "w", encoding="utf-8") as f:
+                f.write(tim)
+        except OSError as e:
+            return _err(f"无法写入延时单元：{e}")
+        _run(["systemctl", "daemon-reload"], timeout=60)
+        rc, out, err = _run(
+            ["systemctl", "enable", "--now", timer_name], timeout=60)
+        if rc != 0:
+            return _err(f"启用延时失败：{err.strip() or rc}")
+        return _ok({"unit": unit, "delay": seconds})
+    else:
+        _run(["systemctl", "enable", unit], timeout=60)
+        return _ok({"unit": unit, "delay": 0, "restored": True})
+
+
+def cmd_power_profile(args):
+    if len(args) != 1:
+        return _err("用法：power_profile <performance|balanced|power-saver>")
+    p = args[0]
+    if p not in ("performance", "balanced", "power-saver"):
+        return _err(f"非法的能效档位：{p}")
+    rc, out, err = _run(["powerprofilesctl", "set", p], timeout=60)
+    if rc != 0:
+        return _err(err.strip() or f"设置失败：{rc}")
+    return _ok({"profile": p})
+
+
+def cmd_wifi_powersave(args):
+    if len(args) != 2 or args[1] not in ("on", "off"):
+        return _err("用法：wifi_powersave <接口> <on|off>")
+    iface = args[0]
+    if not re.match(r"^[a-zA-Z0-9]+$", iface):
+        return _err(f"非法的接口名：{iface!r}")
+    on = args[1] == "on"
+    rc, out, err = _run(
+        ["iw", "dev", iface, "set", "power_save", "on" if on else "off"],
+        timeout=30)
+    if rc != 0:
+        return _err(err.strip() or f"设置失败：{rc}")
+    return _ok({"iface": iface, "power_save": on})
+
+
+def cmd_i18n_set(args):
+    """一键切换系统语言环境：i18n_set <zh|en>。经 localectl 写入，重启生效。"""
+    if len(args) != 1 or args[0] not in ("zh", "en"):
+        return _err("用法：i18n_set <zh|en>")
+    lang = "zh_CN.UTF-8" if args[0] == "zh" else "en_US.UTF-8"
+    if args[0] == "zh":
+        # Debian/Ubuntu 需先生成中文 locale；其它发行版可能无此命令，忽略失败
+        _run(["locale-gen", "zh_CN.UTF-8"], timeout=180)
+    rc, out, err = _run(["localectl", "set-locale", f"LANG={lang}"], timeout=60)
+    if rc == 0:
+        return _ok({"lang": lang})
+    # 兜底：无 localectl 时直接写 /etc/locale.conf（systemd 系）
+    try:
+        with open("/etc/locale.conf", "w", encoding="utf-8") as f:
+            f.write(f"LANG={lang}\n")
+    except OSError as e:
+        return _err(f"localectl 失败：{(err or out).strip()}；且无法写 /etc/locale.conf：{e}")
+    return _ok({"lang": lang, "fallback": True})
+
+
 COMMANDS = {
+    "pkg_fix": cmd_pkg_fix,
+    "service_delay": cmd_service_delay,
+    "power_profile": cmd_power_profile,
+    "wifi_powersave": cmd_wifi_powersave,
+    "i18n_set": cmd_i18n_set,
+    "apt_mark": cmd_apt_mark,
+    "pkg_orphans": cmd_pkg_orphans,
     "disks_scan": cmd_disks_scan,
     "proc_kill": cmd_proc_kill,
     "service_ctl": cmd_service,

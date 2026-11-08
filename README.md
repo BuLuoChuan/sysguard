@@ -22,10 +22,12 @@ sysguard/
 │   │   ├── sysinfo.py process.py disk.py usb.py network.py
 │   │   ├── mirror.py        # 镜像源检测/测速/切换（apt + rpm）
 │   │   ├── cleanup.py memory.py optimize.py security.py
+│   │   ├── pkgfix.py bootanalyze.py diskusage.py tasks.py
+│   │   ├── logs.py power.py alert.py i18n.py
 │   └── ui/                  # Tkinter 界面
 │       ├── app.py           # 主窗口 + 侧边栏导航
 │       ├── widgets.py       # 通用组件
-│       └── pages/           # 10 个功能页
+│   └── pages/           # 18 个功能页，分为 7 个导航类别
 ├── bin/sysguard             # /usr/bin 启动器
 ├── bin/sysguard-cli         # /usr/sbin 特权入口
 ├── data/sysguard.desktop    # 桌面启动器
@@ -52,9 +54,9 @@ SysGuard 提供四种安装方式，全部**架构无关**（x86_64 / ARM64 通�
 
 | 方式 | 适用系统 | 安装命令 | 卸载命令 |
 | --- | --- | --- | --- |
-| deb 包 | Debian / Ubuntu | `sudo dpkg -i sysguard_1.0.0_all.deb` | `sudo apt-get purge sysguard` |
-| rpm 包 | Fedora / RHEL / CentOS / Rocky / Alma | `sudo dnf install ./sysguard-1.0.0-1.noarch.rpm` | `sudo rpm -e sysguard` |
-| rpm 包 | openSUSE | `sudo zypper install ./sysguard-1.0.0-1.noarch.rpm` | `sudo rpm -e sysguard` |
+| deb 包 | Debian / Ubuntu | `sudo apt install ./sysguard_1.2.1_all.deb`（自动拉取依赖） | `sudo apt-get purge sysguard` |
+| rpm 包 | Fedora / RHEL / CentOS / Rocky / Alma | `sudo dnf install ./sysguard-1.2.1-1.noarch.rpm` | `sudo rpm -e sysguard` |
+| rpm 包 | openSUSE | `sudo zypper install ./sysguard-1.2.1-1.noarch.rpm` | `sudo rpm -e sysguard` |
 | 源码脚本 | 任意发行版 | `sudo ./install.sh` | `sudo ./install.sh --uninstall` |
 | PKGBUILD | Arch / Manjaro | `cd arch && makepkg -si` | `sudo pacman -R sysguard` |
 
@@ -62,9 +64,12 @@ SysGuard 提供四种安装方式，全部**架构无关**（x86_64 / ARM64 通�
 
 ### GitHub 测试版下载
 
-在 [v1.0.0-beta.1 Release](https://github.com/BuLuoChuan/sysguard/releases/tag/v1.0.0-beta.1)
-下载 deb、rpm 安装包、源码安装脚本和源码归档。下载后按下表选择对应安装
-方式；本测试版尚未经过完整测试，请先阅读本说明并在测试环境中使用。
+在 [v1.2.1 Beta Release](https://github.com/BuLuoChuan/sysguard/releases/tag/v1.2.1-beta.1)
+下载 deb、rpm 安装包、源码安装脚本、源码归档和校验文件。该版本尚未经过完整
+测试，请先阅读本说明并在测试环境中使用。
+
+1.2.1 新增软件包修复、启动性能分析、定时任务审计、电源与电池、资源告警、
+日志诊断及中文环境等功能；磁盘检修、空间管理和 USB 设备整合在磁盘设备页。
 
 ## 功能建议与反馈
 
@@ -78,8 +83,8 @@ SysGuard 提供四种安装方式，全部**架构无关**（x86_64 / ARM64 通�
 ## 构建 deb
 
 ```bash
-./build.sh 1.0.0
-# 产出 build/sysguard_1.0.0_all.deb
+./build.sh
+# 产出 build/sysguard_1.2.1_all.deb
 ```
 
 纯 Python 脚本，无编译产物，架构无关，产出单个 `Architecture: all` 包，
@@ -88,8 +93,8 @@ x86_64 与 ARM64 通用。
 ## 构建 rpm
 
 ```bash
-./build-rpm.sh 1.0.0
-# 产出 build/sysguard-1.0.0-1.noarch.rpm
+./build-rpm.sh
+# 产出 build/sysguard-1.2.1-1.noarch.rpm
 ```
 
 `BuildArch: noarch`（架构无关），同一份 rpm 可用于 x86_64 / aarch64 等

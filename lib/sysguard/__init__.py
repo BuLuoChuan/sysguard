@@ -7,6 +7,6 @@ GUI 以普通用户运行，所有需要 root 的操作统一通过 pkexec 调�
 `sysguard-cli`，入口内部做命令白名单与设备守卫校验。
 """
 
-__version__ = "1.0.0"
+__version__ = "1.2.1"
 __app_name__ = "SysGuard"
 __app_name_cn__ = "系统管家"

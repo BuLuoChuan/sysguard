@@ -3,7 +3,7 @@
 # 纯 Python 脚本，架构无关，产出单个 noarch RPM，适用所有架构
 # （x86_64 / aarch64 及其它受支持的 Linux）。
 #
-# 用法: ./build-rpm.sh [版本号]   默认 1.0.0
+# 用法: ./build-rpm.sh [版本号]   默认 1.2.1
 #
 # 依赖:
 #   - RPM/Fedora/openSUSE 等: 自带 rpmbuild（sudo dnf install rpm-build）
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.2.1}"
 RPMBUILD="${RPMBUILD:-rpmbuild}"
 
 TOPDIR="$SRC_DIR/build/rpmbuild"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+import urllib.request
 
 from . import shell
 
@@ -124,3 +125,102 @@ def _parse(rc, out, err):
     if obj.get("ok"):
         return True, obj.get("data")
     return False, obj.get("error", "未知错误")
+
+
+def routes() -> list[str]:
+    """路由表（ip route）。"""
+    rc, out, _ = shell.run(["ip", "route"], timeout=20)
+    return [l for l in out.splitlines() if l.strip()] if rc == 0 else []
+
+
+def wifi_interfaces() -> list[str]:
+    """无线接口（wlan*/wl*）。"""
+    rc, out, _ = shell.run(["ip", "-o", "link", "show"], timeout=15)
+    ifaces = []
+    if rc != 0:
+        return ifaces
+    for line in out.splitlines():
+        m = re.match(r"\d+:\s+(\S+):", line)
+        if m and m.group(1).startswith("wl"):
+            ifaces.append(m.group(1))
+    return ifaces
+
+
+def wifi_powersave(iface):
+    """返回 'on' / 'off' / 'unknown'。"""
+    if not shell.which("iw"):
+        return "unknown"
+    rc, out, _ = shell.run(["iw", "dev", iface, "get", "power_save"], timeout=20)
+    if rc != 0:
+        return "unknown"
+    low = out.lower()
+    if "on" in low:
+        return "on"
+    if "off" in low:
+        return "off"
+    return "unknown"
+
+
+def wifi_powersave_set(iface, on):
+    rc, out, err = shell.pkexec(
+        "wifi_powersave", [iface, "on" if on else "off"], timeout=60)
+    return _parse(rc, out, err)
+
+
+# ---------------------------------------------------------------------------
+# 最大带宽测速（出口带宽峰值，非实时速率）
+# ---------------------------------------------------------------------------
+
+_SPEED_URL_DOWN = "https://speed.cloudflare.com/__down?bytes=200000000"
+_SPEED_URL_UP = "https://speed.cloudflare.com/__up"
+_SPEED_UA = {"User-Agent": "SysGuard/1.2"}
+
+
+def max_bandwidth(duration: float = 5.0, timeout: int = 15) -> dict:
+    """测本机可达到的最大下行/上行带宽（出口带宽峰值）。
+
+    与 `realtime_rate()` 的实时采样不同：本函数通过向 Cloudflare 高速
+    测速节点持续传输来逼近出口带宽上限。返回 {"down_bps": ..., "up_bps": ...}，
+    单位为 bit/s；单项失败时为 None。
+    """
+    return {"down_bps": _max_down(duration, timeout),
+            "up_bps": _max_up(duration, timeout)}
+
+
+def _max_down(duration: float, timeout: int):
+    try:
+        req = urllib.request.Request(_SPEED_URL_DOWN, headers=_SPEED_UA)
+        t0 = time.monotonic()
+        total = 0
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            while time.monotonic() - t0 < duration:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+        dt = time.monotonic() - t0
+        if dt <= 0 or total <= 0:
+            return None
+        return total * 8 / dt
+    except Exception:
+        return None
+
+
+def _max_up(duration: float, timeout: int):
+    chunk_size = 1024 * 1024  # 每次 POST 1MB
+    payload = b"x" * chunk_size
+    t0 = time.monotonic()
+    sent = 0
+    try:
+        while time.monotonic() - t0 < duration:
+            req = urllib.request.Request(
+                _SPEED_URL_UP, data=payload, method="POST",
+                headers={"User-Agent": "SysGuard/1.2",
+                         "Content-Type": "application/octet-stream"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                r.read()
+            sent += chunk_size
+        dt = time.monotonic() - t0
+        return sent * 8 / dt if dt > 0 and sent else None
+    except Exception:
+        return None

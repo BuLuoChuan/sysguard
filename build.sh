@@ -2,11 +2,11 @@
 # 构建 SysGuard deb 包（架构无关 all，x86_64 与 ARM64 通用）。
 # 纯 Python 脚本，无编译产物，产出单个 Architecture: all 包。
 #
-# 用法: ./build.sh [版本号]   默认 1.0.0
+# 用法: ./build.sh [版本号]   默认 1.2.1
 set -euo pipefail
 
 SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.2.1}"
 PKG="sysguard"
 ARCH="all"
 BUILD="$SRC_DIR/build"

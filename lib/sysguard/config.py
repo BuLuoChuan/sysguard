@@ -33,6 +33,8 @@ DEP_MAP = {
     "ufw": "ufw",
     "shred": "coreutils",
     "journalctl": "systemd",
+    "localectl": "systemd",
+    "locale-gen": "locales",
 }
 
 # 颜色主题（ttk 样式名，避免依赖第三方主题包）

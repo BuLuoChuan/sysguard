@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""镜像源页：检测发行版 / 测速 / 一键切换（apt 与 rpm）。"""
+"""镜像源页：检测发行版 / 一键测速延时 / 一键切换（apt 与 rpm）。
+
+一键测速会对当前发行版的全部镜像同时测「网速 + 延时」，完成后按
+综合评分（网速/延时权重）自动排序，无需手动逐个选择镜像。
+"""
 from __future__ import annotations
 
 import threading
@@ -16,6 +20,8 @@ class Page:
         self.frame = widgets.ScrollableFrame(parent)
         self.frame.pack(fill="both", expand=True)
         self._mirrors = []
+        self._testing = False
+        self._supported = True
 
         widgets.heading(self.frame.inner, "镜像源")
 
@@ -30,24 +36,29 @@ class Page:
         list_card = widgets.Card(self.frame.inner)
         head = tk.Frame(list_card, bg=widgets.THEME["card_bg"])
         head.pack(fill="x", padx=12, pady=(10, 0))
-        ttk.Label(head, text="可选镜像", style="Sub.TLabel").pack(side="left")
+        ttk.Label(head, text="可选镜像（一键测速后按速度/延时自动排序）",
+                  style="Sub.TLabel").pack(side="left")
         ttk.Button(head, text="刷新", command=self.refresh).pack(side="right")
 
-        self.tree = ttk.Treeview(list_card, columns=("name", "base", "speed"),
-                                 show="headings", height=8)
-        self.tree.heading("name", text="名称")
-        self.tree.heading("base", text="地址")
-        self.tree.heading("speed", text="速度")
-        self.tree.column("name", width=100, anchor="w")
-        self.tree.column("base", width=400, anchor="w")
-        self.tree.column("speed", width=140, anchor="w")
+        cols = ("name", "base", "speed", "latency")
+        heads = ("名称", "地址", "下载速度", "延时")
+        self.tree = ttk.Treeview(list_card, columns=cols, show="headings",
+                                 height=8)
+        for c, h in zip(cols, heads):
+            self.tree.heading(c, text=h)
+        self.tree.column("name", width=90, anchor="w")
+        self.tree.column("base", width=300, anchor="w")
+        self.tree.column("speed", width=110, anchor="w")
+        self.tree.column("latency", width=90, anchor="w")
         self.tree.pack(fill="x", padx=12, pady=6)
 
         btn = tk.Frame(list_card, bg=widgets.THEME["card_bg"])
         btn.pack(fill="x", padx=12, pady=(0, 10))
-        ttk.Button(btn, text="测速选中", command=self.test_selected).pack(side="left")
+        self.test_btn = ttk.Button(btn, text="一键测速（网速+延时）",
+                                   command=self.start_test)
+        self.test_btn.pack(side="left")
         ttk.Button(btn, text="应用选中", command=self.apply_selected).pack(
-            side="left", padx=(6, 0))
+            side="right")
 
         op_card = widgets.Card(self.frame.inner)
         ttk.Label(op_card, text="备份与还原", style="Sub.TLabel").pack(
@@ -75,40 +86,86 @@ class Page:
     def refresh(self):
         info = mirror.available()
         d = info["detect"]
-        self._mirrors = info["mirrors"]
+        self._supported = bool(info.get("supported", True))
+        self._mirrors = [{"id": m["id"], "name": m["name"], "base": m["base"],
+                          "speed": None, "latency": None}
+                         for m in info["mirrors"]]
         pm = d["pm"] or "未检测到"
         fam = d["family"] or "未知"
-        self.info_text.set(
-            f"系统：{d['name']}\n包管理器：{pm}（家族：{fam}）")
+        if not self._supported:
+            self.info_text.set(
+                f"系统：{d['name']}\n包管理器：{pm}（家族：{fam}）\n\n"
+                "⚠ 当前发行版不在支持列表内。\n"
+                "仅支持 Ubuntu / Debian / Fedora / Linux Mint 及其衍生版。")
+        else:
+            self.info_text.set(
+                f"系统：{d['name']}\n包管理器：{pm}（家族：{fam}）")
+        self._render()
+
+    def _require_supported(self) -> bool:
+        if self._supported:
+            return True
+        messagebox.showinfo(
+            "暂不支持",
+            "当前发行版不在支持列表内。\n仅支持 Ubuntu / Debian / Fedora / "
+            "Linux Mint 及其衍生版。")
+        return False
+
+    def _render(self):
         self.tree.delete(*self.tree.get_children())
         for m in self._mirrors:
-            self.tree.insert("", "end", values=(m["name"], m["base"], "—"))
+            self.tree.insert("", "end", values=(
+                m["name"], m["base"], m["speed"] or "—", m["latency"] or "—"))
 
-    def test_selected(self):
-        mid = self._selected_id()
-        if not mid:
+    def start_test(self):
+        if self._testing:
             return
+        if not self._require_supported():
+            return
+        if not self._mirrors:
+            messagebox.showinfo("提示", "未检测到可用镜像")
+            return
+        self._testing = True
+        self.test_btn.config(state="disabled")
         self.app.busy(True)
-        try:
-            ok, res = mirror.test_mirror(mid)
-        finally:
-            self.app.busy(False)
-        if ok:
-            speed = f"{res['speed_mbps']} MB/s"
-        else:
-            speed = "不可达"
-        self._update_speed(mid, speed)
+        self.app.set_status("正在测试全部镜像的网速与延时，请稍候…")
+        threading.Thread(target=self._run_test, daemon=True).start()
 
-    def _update_speed(self, mid, text):
-        for item in self.tree.get_children():
-            idx = self.tree.index(item)
-            if idx < len(self._mirrors) and self._mirrors[idx]["id"] == mid:
-                self.tree.item(item, values=(
-                    self._mirrors[idx]["name"],
-                    self._mirrors[idx]["base"], text))
-                break
+    def _run_test(self):
+        try:
+            ok, data = mirror.test_all()
+        except Exception as e:  # 兜底，避免线程内异常中断
+            ok, data = False, {"error": str(e)}
+        # 回主线程更新 UI
+        self.app.root.after(0, lambda: self._finish_test(ok, data))
+
+    def _finish_test(self, ok, data):
+        self._testing = False
+        self.test_btn.config(state="normal")
+        self.app.busy(False)
+        if not ok:
+            messagebox.showwarning("失败", data.get("error", "测速失败"))
+            self.app.set_status("测速失败")
+            return
+        results = data.get("results", [])
+        new_mirrors = []
+        for r in results:
+            m = r["mirror"]
+            if r["ok"]:
+                speed = f"{r['speed_mbps']} MB/s"
+                lat = f"{r['latency_ms']}ms" if r["latency_ms"] is not None else "—"
+            else:
+                speed, lat = "不可达", "—"
+            new_mirrors.append({"id": m["id"], "name": m["name"],
+                                "base": m["base"], "speed": speed,
+                                "latency": lat, "score": r.get("score", -1)})
+        self._mirrors = new_mirrors
+        self._render()
+        self.app.set_status("测速完成，已按网速/延时综合评分自动排序")
 
     def apply_selected(self):
+        if not self._require_supported():
+            return
         mid = self._selected_id()
         if not mid:
             return
